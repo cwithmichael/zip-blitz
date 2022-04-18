@@ -1,7 +1,16 @@
 [package]
 name = "zip-blitz"
 version = "0.1.0"
+authors = ["Michael Terrell <cwithmichael@gmail.com>"]
+license = "MIT"
+description = "Smarter brute-force password searching for PKZIP encrypted files"
+readme = "README.md"
+homepage = "https://github.com/cwithmichael/zip-blitz"
+repository = "https://github.com/cwithmichael/zip-blitz"
+keywords = ["cli", "brute-force", "pkzip"]
+categories = ["command-line-utilities"]
 edition = "2021"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
