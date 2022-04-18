@@ -3,6 +3,7 @@ use clap::Parser;
 use file_type::{Archive, FileType, Jpg, Wmv};
 use std::error::Error;
 use std::fs::File;
+use std::io::{self, BufRead};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -48,7 +49,7 @@ impl<'a> Config<'a> {
     }
 }
 
-pub fn is_header_valid(data: &[u8], file_type: &FileTypeKind) -> bool {
+fn is_header_valid(data: &[u8], file_type: &FileTypeKind) -> bool {
     match file_type {
         FileTypeKind::Wmv(wmv) => wmv.is_valid_header(data),
         FileTypeKind::Jpg(jpg) => jpg.is_valid_header(data),
@@ -79,4 +80,38 @@ fn check_if_file_exists_in_zip(
             }
         }
     }
+}
+
+pub fn run<R>(mut config: Config, input: R) -> Result<(), Box<dyn Error>>
+where
+    io::Stdin: From<R>,
+    R: io::Read,
+{
+    let input: io::Stdin = input.try_into()?;
+    for line in input.lock().lines() {
+        match line {
+            Ok(password) => {
+                if let Ok(file) = config
+                    .archive
+                    .by_name_decrypt(&config.file_name, password.as_bytes())
+                {
+                    match file {
+                        Ok(f) => {
+                            let data: Vec<u8> = io::Read::bytes(f)
+                                .take(12)
+                                .map(|d| d.unwrap_or(0))
+                                .collect();
+                            if is_header_valid(&data, &config.file_type) {
+                                println!("Found it: {}", password);
+                                break;
+                            }
+                        }
+                        Err(_) => (),
+                    }
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    Ok(())
 }
