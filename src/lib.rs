@@ -3,7 +3,7 @@ use clap::Parser;
 use file_type::{Archive, FileType, Jpg, Wmv};
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -27,6 +27,7 @@ pub struct Config<'a> {
     pub file_type: FileTypeKind<'a>,
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum FileTypeKind<'a> {
     Wmv(Wmv<'a>),
     Jpg(Jpg<'a>),
@@ -72,23 +73,19 @@ fn check_if_file_exists_in_zip(
 ) -> Result<(), &'static str> {
     match archive.by_name_decrypt(file_name, b"") {
         Ok(_) => Ok(()),
-        Err(ref e) => {
-            if e.to_string() == zip::result::ZipError::FileNotFound.to_string() {
-                Err("File doesn't exist in zip")
-            } else {
-                Ok(())
-            }
+        Err(ref e) if e.to_string() == zip::result::ZipError::FileNotFound.to_string() => {
+            Err("File doesn't exist in zip")
         }
+        Err(_) => Err("Something went wrong locating file in zip"),
     }
 }
 
-pub fn run<R>(mut config: Config, input: R) -> Result<(), Box<dyn Error>>
+pub fn run<R>(mut config: Config, input: R) -> Result<String, &'static str>
 where
-    io::Stdin: From<R>,
-    R: io::Read,
+    R: io::BufRead,
 {
-    let input: io::Stdin = input.try_into()?;
-    for line in input.lock().lines() {
+    let mut correct_password = String::from("");
+    for line in input.lines() {
         match line {
             Ok(password) => {
                 if let Ok(file) = config
@@ -98,11 +95,11 @@ where
                     match file {
                         Ok(f) => {
                             let data: Vec<u8> = io::Read::bytes(f)
-                                .take(12)
+                                .take(12) // arbitrary number
                                 .map(|d| d.unwrap_or(0))
                                 .collect();
                             if is_header_valid(&data, &config.file_type) {
-                                println!("Found it: {}", password);
+                                correct_password = password.to_string();
                                 break;
                             }
                         }
@@ -113,5 +110,56 @@ where
             Err(_) => break,
         }
     }
-    Ok(())
+    if correct_password.is_empty() {
+        return Err("Password wasn't found");
+    }
+    Ok(correct_password.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_determine_file_type() {
+        if let Ok(jpg) = determine_file_type(String::from("jpg")) {
+            assert_eq!(
+                std::mem::discriminant(&jpg),
+                std::mem::discriminant(&FileTypeKind::Jpg(Jpg { header: &[0] }))
+            );
+        } else {
+            panic!("file type not determined correctly");
+        }
+    }
+
+    #[test]
+    fn test_is_valid_header() {
+        let data = [0xFF, 0xD8];
+        let file_type = determine_file_type((String::from("jpg")).to_string()).unwrap();
+        let ft = match file_type {
+            FileTypeKind::Jpg(jpg) => jpg,
+            _ => panic!("Unable to determine file type"),
+        };
+        assert_eq!(true, ft.is_valid_header(&data));
+    }
+
+    #[test]
+    fn test_blitz_zip_with_jpg() {
+        let mut test_zip_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        test_zip_path.push("test_data/cats.zip");
+        let config = Config::new(Args {
+            zip_name: test_zip_path.into_os_string().into_string().unwrap(),
+            file_name: String::from("kitten.jpg"),
+            file_type: String::from("jpg"),
+        })
+        .unwrap();
+        let wordlist = std::fs::read_to_string("test_data/wordlist.txt")
+            .expect("Something went wrong reading the file");
+        if let Ok(password) = run(config, wordlist.as_bytes()) {
+            assert_eq!(password, "fun");
+        } else {
+            panic!("password validation logic faild");
+        }
+    }
 }
