@@ -21,21 +21,21 @@ pub struct Args {
     file_type: String,
 }
 
-pub struct Config<'a> {
+pub struct Config {
     pub archive: zip::ZipArchive<File>,
     pub file_name: String,
-    pub file_type: FileTypeKind<'a>,
+    pub file_type: FileTypeKind,
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum FileTypeKind<'a> {
-    Wmv(Wmv<'a>),
-    Jpg(Jpg<'a>),
-    Archive(Archive<'a>),
+pub enum FileTypeKind {
+    Wmv(Wmv),
+    Jpg(Jpg),
+    Archive(Archive),
 }
 
-impl<'a> Config<'a> {
-    pub fn new(args: Args) -> Result<Config<'a>, Box<dyn Error>> {
+impl Config {
+    pub fn new(args: Args) -> Result<Config, Box<dyn Error>> {
         let zip_path = std::path::Path::new(&args.zip_name);
         let ft = &args.file_type.as_str();
         let file_type = determine_file_type((&ft).to_string())?;
@@ -47,36 +47,6 @@ impl<'a> Config<'a> {
             file_name: args.file_name,
             file_type: file_type.into(),
         })
-    }
-}
-
-fn is_header_valid(data: &[u8], file_type: &FileTypeKind) -> bool {
-    match file_type {
-        FileTypeKind::Wmv(wmv) => wmv.is_valid_header(data),
-        FileTypeKind::Jpg(jpg) => jpg.is_valid_header(data),
-        FileTypeKind::Archive(archive) => archive.is_valid_header(data),
-    }
-}
-
-fn determine_file_type<'a>(file_type: String) -> Result<FileTypeKind<'a>, &'static str> {
-    match file_type.to_ascii_lowercase().as_str() {
-        "asf" | "wma" | "wmv" => Ok(FileTypeKind::Wmv(Wmv::new())),
-        "jpg" => Ok(FileTypeKind::Jpg(Jpg::new())),
-        "zip" | "apk" | "jar" => Ok(FileTypeKind::Archive(Archive::new())),
-        _ => Err("Unknown file type"),
-    }
-}
-
-fn check_if_file_exists_in_zip(
-    archive: &mut zip::ZipArchive<File>,
-    file_name: &str,
-) -> Result<(), &'static str> {
-    match archive.by_name_decrypt(file_name, b"") {
-        Ok(_) => Ok(()),
-        Err(ref e) if e.to_string() == zip::result::ZipError::FileNotFound.to_string() => {
-            Err("File doesn't exist in zip")
-        }
-        Err(_) => Err("Something went wrong locating file in zip"),
     }
 }
 
@@ -116,6 +86,36 @@ where
     Ok(correct_password.to_string())
 }
 
+fn is_header_valid(data: &[u8], file_type: &FileTypeKind) -> bool {
+    match file_type {
+        FileTypeKind::Wmv(wmv) => wmv.is_valid_header(data),
+        FileTypeKind::Jpg(jpg) => jpg.is_valid_header(data),
+        FileTypeKind::Archive(archive) => archive.is_valid_header(data),
+    }
+}
+
+fn determine_file_type(file_type: String) -> Result<FileTypeKind, &'static str> {
+    match file_type.to_ascii_lowercase().as_str() {
+        "asf" | "wma" | "wmv" => Ok(FileTypeKind::Wmv(Wmv::new())),
+        "jpg" => Ok(FileTypeKind::Jpg(Jpg::new())),
+        "zip" | "apk" | "jar" => Ok(FileTypeKind::Archive(Archive::new())),
+        _ => Err("Unknown file type"),
+    }
+}
+
+fn check_if_file_exists_in_zip(
+    archive: &mut zip::ZipArchive<File>,
+    file_name: &str,
+) -> Result<(), &'static str> {
+    match archive.by_name_decrypt(file_name, b"") {
+        Ok(_) => Ok(()),
+        Err(ref e) if e.to_string() == zip::result::ZipError::FileNotFound.to_string() => {
+            Err("File doesn't exist in zip")
+        }
+        Err(_) => Err("Something went wrong locating file in zip"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,7 +126,7 @@ mod tests {
         if let Ok(jpg) = determine_file_type(String::from("jpg")) {
             assert_eq!(
                 std::mem::discriminant(&jpg),
-                std::mem::discriminant(&FileTypeKind::Jpg(Jpg { header: &[0] }))
+                std::mem::discriminant(&FileTypeKind::Jpg(Jpg { header: vec![0] }))
             );
         } else {
             panic!("file type not determined correctly");
