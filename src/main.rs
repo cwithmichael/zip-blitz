@@ -1,30 +1,57 @@
 mod file_type;
+use clap::Parser;
 use file_type::FileType;
 use std::io::prelude::*;
 use std::io::{self, Read};
 use std::process;
+use zip::result::ZipError;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    /// Name of the zip file
+    #[clap(short, long)]
+    zip_name: String,
+
+    /// Name of the file to test extraction with
+    #[clap(short, long)]
+    file_name: String,
+
+    /// File type
+    #[clap(short = 't', long)]
+    file_type: String,
+}
 
 fn main() -> io::Result<()> {
-    let args: Vec<_> = std::env::args().collect();
-    if args.len() < 3 {
-        println!("Usage: {} <filename>", args[0]);
-        ()
-    }
-    let zip_name = std::path::Path::new(&*args[1]);
-    let file_name = &*args[2];
-    let file_type_str = &*args[3];
-    let file_type = determine_file_type(file_type_str).unwrap_or_else(|err| {
+    let args = Args::parse();
+    let zip_path = std::path::Path::new(&args.zip_name);
+    let file_type = determine_file_type(&args.file_type).unwrap_or_else(|err| {
         println!("Problem parsing arguments: {}", err);
         process::exit(1)
     });
-    let zipfile = std::fs::File::open(&zip_name).unwrap();
+    let zipfile = std::fs::File::open(&zip_path).unwrap_or_else(|err| {
+        println!("Problem opening zip file: {}", err);
+        process::exit(1)
+    });
+    let mut archive = zip::ZipArchive::new(zipfile).unwrap_or_else(|err| {
+        println!("Problem reading zip file: {}", err);
+        process::exit(1)
+    });
+    match archive.by_name_decrypt(&args.file_name, "".as_bytes()) {
+        Ok(_) => (),
+        Err(ref e) => {
+            if e.to_string() == ZipError::FileNotFound.to_string() {
+                println!("File: {} doesn't exist in zip", &args.file_name);
+                process::exit(1)
+            }
+        }
+    }
 
-    let mut archive = zip::ZipArchive::new(zipfile).unwrap();
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         match line {
             Ok(password) => {
-                if let Ok(file) = archive.by_name_decrypt(file_name, password.as_bytes()) {
+                if let Ok(file) = archive.by_name_decrypt(&args.file_name, password.as_bytes()) {
                     match file {
                         Ok(f) => {
                             let data: Vec<u8> =
@@ -37,9 +64,6 @@ fn main() -> io::Result<()> {
                         }
                         Err(_) => (),
                     }
-                } else {
-                    println!("Couldn't find file in zip");
-                    break;
                 }
             }
             Err(_) => break,
