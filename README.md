@@ -14,7 +14,7 @@ Let's say we had an encrypted zip file named `cats.zip` with a jpg file in it.
 In this example the password is `fun` and our wordlist contains `fun`.
 
 ```bash
-$ zip-blitz -z ./test_data/cats.zip -f kitten.jpg -t jpg < ./test_data/wordlist
+$ zip-blitz -z ./test_data/cats.zip -f kitten.jpg -t jpg < ./test_data/wordlist.txt
 Found it: fun
 ```
 
@@ -29,7 +29,7 @@ Found it! -> fun
 
 ## Important Notes
 
-Supports PKZip/ZipCrypto Encryption _only_
+Supports PKZIP/ZipCrypto Encryption _only_
 
 Only a limited number of file types are supported at the moment: zip, wmv/asf/wma, jpg
 
