@@ -1,4 +1,4 @@
-# Blitz Zip
+# Zip Blitz
 
 ## Motivation
 
