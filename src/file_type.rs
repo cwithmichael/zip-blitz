@@ -14,16 +14,19 @@ pub trait FileType<'a> {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Wmv<'a> {
-    header: &'a [u8],
+    pub header: &'a [u8],
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Jpg<'a> {
-    header: &'a [u8],
+    pub header: &'a [u8],
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub struct Archive<'a> {
-    header: &'a [u8],
+    pub header: &'a [u8],
 }
 
 impl<'a> FileType<'a> for Wmv<'a> {
