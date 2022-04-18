@@ -64,9 +64,3 @@ impl<'a> FileType<'a> for Archive<'a> {
         return self.header;
     }
 }
-
-pub enum FileTypeKind<'a> {
-    Wmv(Wmv<'a>),
-    Jpg(Jpg<'a>),
-    Archive(Archive<'a>),
-}
