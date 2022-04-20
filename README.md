@@ -8,13 +8,19 @@ This program hopes to minimize false positives. It works by actually checking to
 
 ## Usage
 
+### Explicitly passing in file type
+
 `zip-blitz -z <zipfile_name> -f <file_to_extract> -t <known_file_extension>`
+
+### Allowing Zip Blitz to guess the file type
+
+`zip-blitz -z <zipfile_name> -f <file_to_extract>`
 
 Let's say we had an encrypted zip file named `cats.zip` with a jpg file in it.
 In this example the password is `fun` and our wordlist contains `fun`.
 
 ```bash
-$ zip-blitz -z ./test_data/cats.zip -f kitten.jpg -t jpg < ./test_data/wordlist.txt
+$ zip-blitz -z ./test_data/cats.zip -f kitten.jpg < ./test_data/wordlist.txt
 Found it: fun
 ```
 
