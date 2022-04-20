@@ -8,7 +8,7 @@ This program hopes to minimize false positives. It works by actually checking to
 
 ## Usage
 
-### Explictly passing in file type
+### Explicitly passing in file type
 
 `zip-blitz -z <zipfile_name> -f <file_to_extract> -t <known_file_extension>`
 
