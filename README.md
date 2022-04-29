@@ -37,6 +37,6 @@ Found it! -> fun
 
 Supports PKZIP/ZipCrypto Encryption _only_
 
-Only a limited number of file types are supported at the moment: zip, wmv/asf/wma, jpg
+Only a limited number of file types are supported at the moment: zip, wmv/asf/wma, jpg, xml
 
 But it's pretty easy to extend support for various file types.

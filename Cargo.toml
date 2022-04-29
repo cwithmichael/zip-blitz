@@ -1,6 +1,6 @@
 [package]
 name = "zip-blitz"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Michael Terrell <cwithmichael@gmail.com>"]
 license = "MIT"
 description = "Smarter brute-force password searching for PKZIP encrypted files"
