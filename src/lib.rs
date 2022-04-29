@@ -23,7 +23,7 @@ pub struct Args {
 pub struct Config {
     pub archive: zip::ZipArchive<File>,
     pub file_name: String,
-    pub file_extension: String,
+    pub file_header: Option<Vec<u8>>,
 }
 
 impl Config {
@@ -39,7 +39,7 @@ impl Config {
         Ok(Config {
             archive,
             file_name: args.file_name,
-            file_extension: file_extension.to_string(),
+            file_header: get_header(&file_extension),
         })
     }
 }
@@ -48,30 +48,29 @@ pub fn run<R>(mut config: Config, mut passwords: R) -> Result<String, &'static s
 where
     R: Iterator<Item = String>,
 {
-    passwords
-        .find(|p| {
-            config
-                .archive
-                .by_name_decrypt(&config.file_name, p.as_bytes())
-                .ok()
-                .and_then(|r| r.ok())
-                .map_or(false, |mut file| {
-                    is_header_valid(&mut file, &config.file_extension)
-                })
-        })
-        .ok_or("Password wasn't found")
+    let header = &config.file_header;
+    if let Some(header) = header {
+        passwords
+            .find(|p| {
+                config
+                    .archive
+                    .by_name_decrypt(&config.file_name, p.as_bytes())
+                    .ok()
+                    .and_then(|r| r.ok())
+                    .map_or(false, |mut file| {
+                        is_header_valid(&mut file, header.to_vec())
+                    })
+            })
+            .ok_or("Password wasn't found")
+    } else {
+        return Err("Unable to detect file header");
+    }
 }
 
-fn is_header_valid(file: &mut ZipFile, file_extension: &str) -> bool {
-    let file_header = get_header(file_extension);
+fn is_header_valid(file: &mut ZipFile, file_header: Vec<u8>) -> bool {
     let mut actual_header = [0u8; 128];
-    match file_header {
-        Some(file_header) => {
-            let header = &mut actual_header[..file_header.len()];
-            file.read_exact(header).is_ok() && header == file_header
-        }
-        None => false,
-    }
+    let header = &mut actual_header[..file_header.len()];
+    file.read_exact(header).is_ok() && header == file_header
 }
 
 pub fn get_header(extension: &str) -> Option<Vec<u8>> {
@@ -95,7 +94,7 @@ fn guess_file_type(file_name: &str) -> Result<String, &'static str> {
         .and_then(|ext| Some(ext.to_string()));
     match ext {
         Some(ext) => Ok(ext),
-        None => Err("didn't recognize file type"),
+        None => Err("failed to guess file type"),
     }
 }
 
@@ -124,7 +123,10 @@ mod tests {
         let zip_file = std::fs::File::open(&test_zip_path).unwrap();
         let mut archive = zip::ZipArchive::new(&zip_file).unwrap();
         let file = archive.by_name_decrypt("kitten.jpg", b"fun").unwrap();
-        assert_eq!(true, is_header_valid(&mut file.unwrap(), "jpg"));
+        assert_eq!(
+            true,
+            is_header_valid(&mut file.unwrap(), get_header("jpg").unwrap())
+        );
     }
 
     #[test]
