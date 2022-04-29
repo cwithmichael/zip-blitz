@@ -1,6 +1,4 @@
-mod file_type;
 use clap::Parser;
-use file_type::{Archive, Jpg, Wmv};
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
@@ -17,30 +15,23 @@ pub struct Args {
     #[clap(short, long)]
     file_name: String,
 
-    /// File type
+    /// File extension
     #[clap(short = 't', long)]
-    file_type: Option<String>,
+    file_extension: Option<String>,
 }
 
 pub struct Config {
     pub archive: zip::ZipArchive<File>,
     pub file_name: String,
-    pub file_type: FileTypeKind,
-}
-
-#[derive(PartialEq, Eq, Debug)]
-pub enum FileTypeKind {
-    Wmv(Wmv),
-    Jpg(Jpg),
-    Archive(Archive),
+    pub file_extension: String,
 }
 
 impl Config {
     pub fn new(args: Args) -> Result<Config, Box<dyn Error>> {
         let zip_path = std::path::Path::new(&args.zip_name);
         let zip_file = std::fs::File::open(&zip_path)?;
-        let file_type = match &args.file_type {
-            Some(ft) => parse_file_type(&ft)?,
+        let file_extension = match &args.file_extension {
+            Some(file_extension) => file_extension.to_owned(),
             None => guess_file_type(&args.file_name)?,
         };
         let mut archive = zip::ZipArchive::new(zip_file)?;
@@ -48,7 +39,7 @@ impl Config {
         Ok(Config {
             archive,
             file_name: args.file_name,
-            file_type: file_type.into(),
+            file_extension: file_extension.to_string(),
         })
     }
 }
@@ -65,45 +56,47 @@ where
                 .ok()
                 .and_then(|r| r.ok())
                 .map_or(false, |mut file| {
-                    is_header_valid(&mut file, &config.file_type)
+                    is_header_valid(&mut file, &config.file_extension)
                 })
         })
         .ok_or("Password wasn't found")
 }
 
-fn is_header_valid(file: &mut ZipFile, file_type: &FileTypeKind) -> bool {
-    let mut header = [0u8; 128];
-    match file_type {
-        FileTypeKind::Wmv(wmv) => {
-            let header = &mut header[..wmv.header.len()];
-            file.read_exact(header).is_ok() && header == wmv.header
+fn is_header_valid(file: &mut ZipFile, file_extension: &str) -> bool {
+    let file_header = get_header(file_extension);
+    let mut actual_header = [0u8; 128];
+    match file_header {
+        Some(file_header) => {
+            let header = &mut actual_header[..file_header.len()];
+            file.read_exact(header).is_ok() && header == file_header
         }
-        FileTypeKind::Jpg(jpg) => {
-            let header = &mut header[..jpg.header.len()];
-            file.read_exact(header).is_ok() && header == jpg.header
-        }
-        FileTypeKind::Archive(archive) => {
-            let header = &mut header[..archive.header.len()];
-            file.read_exact(header).is_ok() && header == archive.header
-        }
+        None => false,
     }
 }
 
-fn parse_file_type(file_type: &str) -> Result<FileTypeKind, &'static str> {
-    match file_type.to_ascii_lowercase().as_str() {
-        "asf" | "wma" | "wmv" => Ok(FileTypeKind::Wmv(Wmv::default())),
-        "jpg" => Ok(FileTypeKind::Jpg(Jpg::default())),
-        "zip" | "apk" | "jar" => Ok(FileTypeKind::Archive(Archive::default())),
-        _ => Err("Unknown file type"),
+pub fn get_header(extension: &str) -> Option<Vec<u8>> {
+    match extension {
+        "asf" | "wma" | "wmv" => Some(vec![
+            0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11, 0xA6, 0xD9, 0x00, 0xAA, 0x00, 0x62,
+            0xCE, 0x6C,
+        ]),
+        "png" => Some(vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        "jpg" => Some(vec![0xFF, 0xD8]),
+        "zip" | "apk" | "jar" => Some(vec![0x50, 0x4B, 0x03, 0x04]),
+        "xml" => Some(vec![0x3C, 0x3F, 0x78, 0x6D, 0x6C, 0x20]),
+        _ => None,
     }
 }
 
-fn guess_file_type(file_name: &str) -> Result<FileTypeKind, &'static str> {
-    file_name
+fn guess_file_type(file_name: &str) -> Result<String, &'static str> {
+    let ext = file_name
         .split('.')
         .next_back()
-        .and_then(|ext| Some(parse_file_type(ext)))
-        .unwrap_or(Err("didn't recognize file type"))
+        .and_then(|ext| Some(ext.to_string()));
+    match ext {
+        Some(ext) => Ok(ext),
+        None => Err("didn't recognize file type"),
+    }
 }
 
 fn check_if_file_exists_in_zip(
@@ -125,28 +118,13 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_determine_file_type() {
-        if let Ok(jpg) = parse_file_type("jpg") {
-            assert_eq!(
-                std::mem::discriminant(&jpg),
-                std::mem::discriminant(&FileTypeKind::Jpg(Jpg { header: vec![0] }))
-            );
-        } else {
-            panic!("file type not determined correctly");
-        }
-    }
-
-    #[test]
     fn test_is_header_valid() {
         let mut test_zip_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         test_zip_path.push("test_data/cats.zip");
         let zip_file = std::fs::File::open(&test_zip_path).unwrap();
         let mut archive = zip::ZipArchive::new(&zip_file).unwrap();
         let file = archive.by_name_decrypt("kitten.jpg", b"fun").unwrap();
-        assert_eq!(
-            true,
-            is_header_valid(&mut file.unwrap(), &FileTypeKind::Jpg(Jpg::default()))
-        );
+        assert_eq!(true, is_header_valid(&mut file.unwrap(), "jpg"));
     }
 
     #[test]
@@ -156,7 +134,7 @@ mod tests {
         let config = Config::new(Args {
             zip_name: test_zip_path.into_os_string().into_string().unwrap(),
             file_name: String::from("kitten.jpg"),
-            file_type: Some(String::from("jpg")),
+            file_extension: Some(String::from("jpg")),
         })
         .unwrap();
         let wordlist = std::fs::read_to_string("test_data/wordlist.txt")
@@ -176,7 +154,7 @@ mod tests {
         let config = Config::new(Args {
             zip_name: test_zip_path.into_os_string().into_string().unwrap(),
             file_name: String::from("kitten.jpg"),
-            file_type: None,
+            file_extension: None,
         })
         .unwrap();
         let wordlist = std::fs::read_to_string("test_data/wordlist.txt")

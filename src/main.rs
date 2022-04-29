@@ -1,4 +1,3 @@
-mod file_type;
 use clap::StructOpt;
 use std::{io::BufRead, process};
 use zip_blitz::{Args, Config};
