@@ -1,6 +1,6 @@
 [package]
 name = "zip-blitz"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Michael Terrell <cwithmichael@gmail.com>"]
 license = "MIT"
 description = "Smarter brute-force password searching for PKZIP encrypted files"
@@ -16,4 +16,4 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.9", features = ["derive"] }
-zip = "0.6.*"
+zip = "2.2.2"

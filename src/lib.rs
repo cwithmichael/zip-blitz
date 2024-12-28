@@ -1,8 +1,20 @@
 use clap::Parser;
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::Read;
 use zip::read::ZipFile;
+
+#[derive(Debug)]
+struct ZipFileConfigError(String);
+
+impl fmt::Display for ZipFileConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "ZipFileConfigError: {}", self.0)
+    }
+}
+
+impl Error for ZipFileConfigError {}
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -35,12 +47,18 @@ impl Config {
             None => guess_file_type(&args.file_name)?,
         };
         let mut archive = zip::ZipArchive::new(zip_file)?;
-        check_if_file_exists_in_zip(&mut archive, &args.file_name)?;
-        Ok(Config {
-            archive,
-            file_name: args.file_name,
-            file_header: get_header(&file_extension),
-        })
+        let file_exists = check_if_file_exists_in_zip(&mut archive, &args.file_name);
+        if file_exists {
+            Ok(Config {
+                archive,
+                file_name: args.file_name,
+                file_header: get_header(&file_extension),
+            })
+        } else {
+            Err(Box::new(ZipFileConfigError(
+                "File does not exist in zip".into(),
+            )))
+        }
     }
 }
 
@@ -56,7 +74,7 @@ where
                     .archive
                     .by_name_decrypt(&config.file_name, p.as_bytes())
                     .ok()
-                    .and_then(|r| r.ok())
+                    .and_then(|r| r.into())
                     .map_or(false, |mut file| {
                         is_header_valid(&mut file, header.to_vec())
                     })
@@ -98,16 +116,12 @@ fn guess_file_type(file_name: &str) -> Result<String, &'static str> {
     }
 }
 
-fn check_if_file_exists_in_zip(
-    archive: &mut zip::ZipArchive<File>,
-    file_name: &str,
-) -> Result<(), &'static str> {
-    match archive.by_name_decrypt(file_name, b"") {
-        Ok(_) => Ok(()),
-        Err(ref e) if e.to_string() == zip::result::ZipError::FileNotFound.to_string() => {
-            Err("File doesn't exist in zip")
-        }
-        Err(_) => Err("Something went wrong locating file in zip"),
+fn check_if_file_exists_in_zip(archive: &mut zip::ZipArchive<File>, file_name: &str) -> bool {
+    let mut file_names = archive.file_names();
+    let file_exits = file_names.find(|&x| x == file_name);
+    match file_exits {
+        Some(_) => true,
+        None => false,
     }
 }
 
@@ -122,11 +136,8 @@ mod tests {
         test_zip_path.push("test_data/cats.zip");
         let zip_file = std::fs::File::open(&test_zip_path).unwrap();
         let mut archive = zip::ZipArchive::new(&zip_file).unwrap();
-        let file = archive.by_name_decrypt("kitten.jpg", b"fun").unwrap();
-        assert_eq!(
-            true,
-            is_header_valid(&mut file.unwrap(), get_header("jpg").unwrap())
-        );
+        let mut file = archive.by_name_decrypt("kitten.jpg", b"fun").unwrap();
+        assert_eq!(true, is_header_valid(&mut file, get_header("jpg").unwrap()));
     }
 
     #[test]
